@@ -74,57 +74,51 @@ def cargar_compras() -> list:
     except: return []
 
 # ── GitHub Auto-Push ───────────────────────────────────────────
+# ── GitHub Auto-Push ───────────────────────────────────────────
 def subir_a_github() -> str:
     """
-    Ejecuta git add, commit y push. Retorna mensaje de estado.
+    Ejecuta git add -A, commit y push. Retorna mensaje de estado.
     """
     repo_dir = _BASE_DIR
     try:
-        # Verificar que estamos en un repo git
-        result = subprocess.run(
-            ["git", "-C", repo_dir, "status", "--short"],
-            capture_output=True, text=True, timeout=15
-        )
-        if result.returncode != 0:
-            return f"⚠️ *Error Git:* No es un repositorio válido\\n```\\n{result.stderr[:200]}\\n```"
-
-        archivos_cambiados = result.stdout.strip()
-        if not archivos_cambiados:
-            return "📦 *GitHub:* No hay cambios nuevos para subir.\\nTodo está actualizado ✅"
-
-        # Git add
+        # 1. Agregar TODO (modificados, nuevos, eliminados)
         r1 = subprocess.run(
-            ["git", "-C", repo_dir, "add", "."],
+            ["git", "-C", repo_dir, "add", "-A"],
             capture_output=True, text=True, timeout=15
         )
         if r1.returncode != 0:
             return f"⚠️ *Error en git add:*\\n```\\n{r1.stderr[:300]}\\n```"
 
-        # Git commit
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # 2. Verificar si hay algo staged para commitear
         r2 = subprocess.run(
+            ["git", "-C", repo_dir, "diff", "--cached", "--quiet"],
+            capture_output=True, text=True, timeout=15
+        )
+        # diff --cached --quiet retorna 0 si NO hay cambios staged
+        if r2.returncode == 0:
+            return "📦 *GitHub:* No hay cambios nuevos para subir.\\nTodo está actualizado ✅"
+
+        # 3. Commit
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        r3 = subprocess.run(
             ["git", "-C", repo_dir, "commit", "-m", f"Auto update via Telegram bot — {timestamp}"],
             capture_output=True, text=True, timeout=15
         )
-        commit_msg = r2.stdout.strip() if r2.stdout else "Sin mensaje"
-        if r2.returncode != 0 and "nothing to commit" not in r2.stderr.lower():
-            return f"⚠️ *Error en git commit:*\\n```\\n{r2.stderr[:300]}\\n```"
+        if r3.returncode != 0:
+            return f"⚠️ *Error en git commit:*\\n```\\n{r3.stderr[:300]}\\n```"
 
-        # Git push
-        r3 = subprocess.run(
+        # 4. Push
+        r4 = subprocess.run(
             ["git", "-C", repo_dir, "push", "origin", "main"],
             capture_output=True, text=True, timeout=30
         )
-        if r3.returncode != 0:
-            return f"⚠️ *Error en git push:*\\n```\\n{r3.stderr[:400]}\\n```"
+        if r4.returncode != 0:
+            return f"⚠️ *Error en git push:*\\n```\\n{r4.stderr[:400]}\\n```"
 
-        # Éxito
-        lineas_cambio = archivos_cambiados.count('\n') + 1 if archivos_cambiados else 0
+        # 5. Éxito
         return "\\n".join([
             "🚀 *¡Código subido a GitHub exitosamente!*",
             SEP,
-            f"📁 Archivos modificados: *{lineas_cambio}*",
-            f"📝 Commit: `{commit_msg[:60]}`",
             f"⏰ Hora: *{timestamp}*",
             SEP,
             "🔗 [Ver en GitHub](https://github.com/Parkito183/atom-bot)",
