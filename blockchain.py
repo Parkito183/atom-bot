@@ -93,7 +93,7 @@ def consultar_saldos_blockchain_atom() -> dict:
         "rewards":       rewards,
         "unbonding":     unbonding,
         "unbonding_fin": unbonding_fin,
-        "validadores":   nombres_val,
+        "validadores":   nombres_val if 'nombres_val' in locals() else [],
     }
 
 
