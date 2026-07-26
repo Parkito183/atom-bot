@@ -10,3 +10,6 @@ __pycache__/
 # Backup files
 *.tar.gz
 backup_*
+github
+*.token
+*.secret
