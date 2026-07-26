@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-backtest_v5.py — Multi-Timeframe Forensic Backtest
-Pulido de estrategia: stops amplios, early exit, análisis de pérdidas.
+backtest_v5.py — VALIDACION de parametros ganadores del Optimizer (+385.8%)
+Basado en backtest_v4.py con parametros optimizados.
 """
 import urllib.request
 import json
@@ -11,45 +11,45 @@ from datetime import datetime
 from collections import defaultdict
 
 # ═══════════════════════════════════════════════════════════════
-# CONFIGURACIÓN
+# CONFIGURACION
 # ═══════════════════════════════════════════════════════════════
 CONFIG = {
     'symbol_ada': 'ADAUSDT',
     'symbol_btc': 'BTCUSDT',
-    'timeframe': '1h',          # Probar '1h', '4h', '15m'
+    'timeframe': '4h',
     'start_date': '2023-01-01',
     'end_date': None,
     'capital_mxn': 10000,
     'tc': 17.5,
 }
 
+# ═══════════════════════════════════════════════════════════════
+# PARAMETROS GANADORES DEL OPTIMIZER (+385.8% ROI)
+# ═══════════════════════════════════════════════════════════════
 ESTRATEGIA = {
-    'nombre': 'Multi-TF Forensic V5',
-    'apalancamiento': 3,
+    'nombre': 'Optimizer Winner Validation',
+    'apalancamiento': 5,           # ← 5x (vs 3x en V4)
     'comision': 0.0005,
-    
+
     'btc_confirmacion': True,
     'btc_emergencia': True,
-    
-    # Entrada
-    'rsi_long_min': 35,
-    'rsi_long_max': 75,
+
+    'rsi_long_min': 30,            # ← 30 (vs 35)
+    'rsi_long_max': 70,            # ← 70 (vs 75)
     'rsi_short_min': 25,
     'rsi_short_max': 65,
-    
-    # Gestión de riesgo MEJORADA
-    'stop_atr_mult': 2.5,       # Más amplio que 1.5
-    'objetivo_atr_mult': 3.0,
+
+    'stop_atr_mult': 2.0,          # ← 2.0x (vs 1.5x)
+    'objetivo_atr_mult': 4.0,      # ← 4.0x (vs 3.0x)
     'trailing': True,
     'trailing_atr_mult': 1.0,
-    'max_bars': 24,             # En 1h = 1 día, en 4h = 4 días
-    
-    # NUEVO: Early Exit
-    'early_exit': True,
-    'early_exit_bars': 4,       # Después de 4 velas
-    'early_exit_min_advance': 0.5,  # Si no avanzó 0.5% a favor, salir
-    
-    'atr_min_pct': 0.3,         # Un poco más permisivo para 1h
+    'max_bars': 36,                # ← 36 (vs 24)
+    'atr_min_pct': 0.3,            # ← 0.3 (vs 0.5, mas permisivo)
+
+    # NUEVO: Early Exit (del optimizer)
+    'early_exit': False,
+    'early_exit_bars': 4,
+    'early_exit_min_advance': 0.5,
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -73,7 +73,7 @@ def descargar_velas(symbol, interval, start_str, end_str=None):
                     all_velas.append({'ts': int(v[0]), 'open': float(v[1]), 'high': float(v[2]), 'low': float(v[3]), 'close': float(v[4]), 'vol': float(v[5])})
                 current_ts = data[-1][0] + 1
                 print(f"  ↳ {symbol}: {len(all_velas)} velas...")
-                time.sleep(0.15)
+                time.sleep(0.2)
         except Exception as e:
             print(f"⚠️ Error {symbol}: {e}")
             time.sleep(2)
@@ -168,7 +168,7 @@ def calc_todos(velas):
     return velas
 
 # ═══════════════════════════════════════════════════════════════
-# RÉGIMEN BTC
+# REGIMEN BTC
 # ═══════════════════════════════════════════════════════════════
 def detectar_regimen_btc(velas, i):
     v = velas[i]
@@ -187,7 +187,7 @@ def detectar_regimen_btc(velas, i):
     return 'lateral'
 
 # ═══════════════════════════════════════════════════════════════
-# ESTRATEGIA CON EARLY EXIT
+# ESTRATEGIA CON PARAMETROS GANADORES
 # ═══════════════════════════════════════════════════════════════
 def buscar_entrada(ada_velas, btc_velas, i, c):
     v = ada_velas[i]
@@ -201,9 +201,9 @@ def buscar_entrada(ada_velas, btc_velas, i, c):
     st_prev = v_prev.get('supertrend')
     if atr / precio * 100 < c['atr_min_pct']:
         return None
-    
     btc_regimen = detectar_regimen_btc(btc_velas, i)
-    
+
+    # === LONG ===
     if st_prev == 'bajista' and st_now == 'alcista':
         if c['rsi_long_min'] <= rsi <= c['rsi_long_max']:
             if c['btc_confirmacion'] and btc_regimen == 'bajista':
@@ -214,7 +214,8 @@ def buscar_entrada(ada_velas, btc_velas, i, c):
             recompensa = objetivo - precio
             if recompensa / riesgo >= 2.0:
                 return 'long', stop, objetivo, btc_regimen
-    
+
+    # === SHORT ===
     if st_prev == 'alcista' and st_now == 'bajista':
         if c['rsi_short_min'] <= rsi <= c['rsi_short_max']:
             if c['btc_confirmacion'] and btc_regimen == 'alcista':
@@ -236,22 +237,22 @@ def evaluar_salida(trade, ada_velas, btc_velas, i, c):
     objetivo = trade['objetivo']
     atr = v.get('atr', pe * 0.02)
     bars = i - trade['idx_entrada']
-    
+
     trade['precio_max'] = max(trade.get('precio_max', pe), precio)
     trade['precio_min'] = min(trade.get('precio_min', pe), precio)
-    
+
     # Stop loss
     if tipo == 'long' and precio <= stop:
         return True, "stop_loss"
     if tipo == 'short' and precio >= stop:
         return True, "stop_loss"
-    
+
     # Objetivo
     if tipo == 'long' and precio >= objetivo:
         return True, "objetivo"
     if tipo == 'short' and precio <= objetivo:
         return True, "objetivo"
-    
+
     # NUEVO: Early Exit
     if c.get('early_exit') and bars == c['early_exit_bars']:
         if tipo == 'long':
@@ -262,7 +263,7 @@ def evaluar_salida(trade, ada_velas, btc_velas, i, c):
             avance = (pe - precio) / pe * 100
             if avance < c['early_exit_min_advance']:
                 return True, "early_exit"
-    
+
     # Trailing
     if c.get('trailing'):
         if tipo == 'long':
@@ -277,7 +278,7 @@ def evaluar_salida(trade, ada_velas, btc_velas, i, c):
                 trail = trade['precio_min'] + atr * c['trailing_atr_mult']
                 if precio >= trail:
                     return True, "trailing"
-    
+
     # Emergencia BTC
     if c.get('btc_emergencia'):
         btc_regimen_actual = detectar_regimen_btc(btc_velas, i)
@@ -286,11 +287,11 @@ def evaluar_salida(trade, ada_velas, btc_velas, i, c):
             return True, "btc_emergencia"
         if tipo == 'short' and btc_regimen_actual == 'alcista' and btc_regimen_entrada != 'alcista':
             return True, "btc_emergencia"
-    
-    # Tiempo máximo
+
+    # Tiempo maximo
     if bars >= c['max_bars']:
         return True, "tiempo_maximo"
-    
+
     return False, None
 
 # ═══════════════════════════════════════════════════════════════
@@ -300,11 +301,11 @@ def ejecutar_backtest(ada_velas, btc_velas):
     capital_mxn = CONFIG['capital_mxn']
     tc = CONFIG['tc']
     c = ESTRATEGIA
-    
+
     trades = []
     en_trade = False
     trade = None
-    
+
     for i in range(50, len(ada_velas)):
         if en_trade and trade:
             debe_salir, razon = evaluar_salida(trade, ada_velas, btc_velas, i, c)
@@ -312,16 +313,16 @@ def ejecutar_backtest(ada_velas, btc_velas):
                 precio_salida = ada_velas[i]['close']
                 pe = trade['precio_entrada']
                 tipo = trade['tipo']
-                
+
                 if tipo == 'long':
                     pnl_bruto = (precio_salida - pe) / pe * 100
                 else:
                     pnl_bruto = (pe - precio_salida) / pe * 100
-                
+
                 pnl_neto = pnl_bruto - c['comision'] * 2 * 100
                 cap_ef_usd = capital_mxn / tc * c['apalancamiento']
                 ganancia_mxn = cap_ef_usd * pnl_neto / 100 * tc
-                
+
                 trades.append({
                     'tipo': tipo,
                     'entrada': pe,
@@ -334,13 +335,11 @@ def ejecutar_backtest(ada_velas, btc_velas):
                     'razon': razon,
                     'bars': i - trade['idx_entrada'],
                     'btc_regimen': trade.get('btc_regimen'),
-                    'idx_entrada': trade['idx_entrada'],
-                    'idx_salida': i,
                 })
-                
+
                 en_trade = False
                 trade = None
-        
+
         if not en_trade:
             senal = buscar_entrada(ada_velas, btc_velas, i, c)
             if senal:
@@ -354,37 +353,28 @@ def ejecutar_backtest(ada_velas, btc_velas):
                     'btc_regimen': btc_reg,
                 }
                 en_trade = True
-    
+
     return trades
 
 # ═══════════════════════════════════════════════════════════════
-# REPORTE FORENSE
+# REPORTE
 # ═══════════════════════════════════════════════════════════════
-def imprimir_reporte(trades, timeframe_label):
+def imprimir_reporte(trades):
     print("\n" + "="*70)
-    print(f"📊 BACKTEST V5 — {ESTRATEGIA['nombre']} [{timeframe_label}]")
+    print(f"📊 BACKTEST V5 — VALIDACION Optimizer Winner (+385.8%)")
     print("="*70)
-    
+
     n = len(trades)
     if n == 0:
         print("❌ Sin trades")
         return
-    
+
     ganados = sum(1 for t in trades if t['ganador'])
     perdidos = n - ganados
     wr = ganados / n * 100
     pnl_total = sum(t['ganancia_mxn'] for t in trades)
     ganancias = [t['ganancia_mxn'] for t in trades]
-    
-    # Por razón de salida
-    por_razon = defaultdict(lambda: {'count': 0, 'pnl': 0, 'ganados': 0})
-    for t in trades:
-        por_razon[t['razon']]['count'] += 1
-        por_razon[t['razon']]['pnl'] += t['ganancia_mxn']
-        if t['ganador']:
-            por_razon[t['razon']]['ganados'] += 1
-    
-    # Por BTC régimen
+
     por_btc = defaultdict(lambda: {'trades': 0, 'ganados': 0, 'pnl': 0})
     for t in trades:
         r = t['btc_regimen']
@@ -392,7 +382,12 @@ def imprimir_reporte(trades, timeframe_label):
         por_btc[r]['pnl'] += t['ganancia_mxn']
         if t['ganador']:
             por_btc[r]['ganados'] += 1
-    
+
+    por_razon = defaultdict(lambda: {'count': 0, 'pnl': 0})
+    for t in trades:
+        por_razon[t['razon']]['count'] += 1
+        por_razon[t['razon']]['pnl'] += t['ganancia_mxn']
+
     print(f"\n📈 Trades totales:     {n}")
     print(f"✅ Ganados:            {ganados} ({wr:.1f}%)")
     print(f"🔴 Perdidos:           {perdidos}")
@@ -401,67 +396,47 @@ def imprimir_reporte(trades, timeframe_label):
     print(f"🚀 Mejor trade:        ${max(ganancias):,.2f} MXN")
     print(f"💥 Peor trade:         ${min(ganancias):,.2f} MXN")
     print(f"💵 Promedio:           ${sum(ganancias)/n:,.2f} MXN")
-    
-    print(f"\n📋 Por razón de salida:")
-    for r, d in sorted(por_razon.items(), key=lambda x: -x[1]['count']):
-        wr_r = d['ganados']/d['count']*100 if d['count'] > 0 else 0
-        print(f"  {r:20} | Count: {d['count']:3} | WR: {wr_r:5.1f}% | P&L: ${d['pnl']:,.2f}")
-    
-    print(f"\n📋 Por régimen BTC:")
+
+    print(f"\n📋 Por régimen BTC al entrar:")
     for r, d in por_btc.items():
         wr_r = d['ganados']/d['trades']*100 if d['trades'] > 0 else 0
         print(f"  BTC {r.upper():8} | Trades: {d['trades']:3} | WR: {wr_r:5.1f}% | P&L: ${d['pnl']:,.2f}")
-    
-    # FORENSE: Análisis de trades perdidos por stop_loss
-    perdidos_stop = [t for t in trades if t['razon'] == 'stop_loss' and not t['ganador']]
-    if perdidos_stop:
-        print(f"\n🔍 FORENSE — {len(perdidos_stop)} trades perdidos por stop_loss:")
-        print("  (Primeros 10 ejemplos)")
-        for t in perdidos_stop[:10]:
-            print(f"    {t['fecha_entrada'][:10]} | {t['tipo'].upper():5} | "
-                  f"Entrada: ${t['entrada']:.4f} | Salida: ${t['salida']:.4f} | "
-                  f"P&L: {t['pnl_pct']:+.2f}% | Bars: {t['bars']}")
-    
+
+    print(f"\n📋 Por razón de salida:")
+    for r, d in por_razon.items():
+        print(f"  {r:20} | Count: {d['count']:3} | P&L: ${d['pnl']:,.2f}")
+
     print("="*70)
-    return {
-        'timeframe': timeframe_label,
-        'trades': n,
-        'wr': wr,
-        'roi': pnl_total/CONFIG['capital_mxn']*100,
-        'pnl_total': pnl_total,
-        'por_razon': dict(por_razon),
-    }
 
 # ═══════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    tf = CONFIG['timeframe']
-    
-    ada_velas = descargar_velas(CONFIG['symbol_ada'], tf, CONFIG['start_date'], CONFIG['end_date'])
-    btc_velas = descargar_velas(CONFIG['symbol_btc'], tf, CONFIG['start_date'], CONFIG['end_date'])
-    
+    ada_velas = descargar_velas(CONFIG['symbol_ada'], CONFIG['timeframe'], CONFIG['start_date'], CONFIG['end_date'])
+    btc_velas = descargar_velas(CONFIG['symbol_btc'], CONFIG['timeframe'], CONFIG['start_date'], CONFIG['end_date'])
+
     if not ada_velas or not btc_velas:
         exit(1)
-    
-    # Alinear
+
     ts_ada = {v['ts'] for v in ada_velas}
     ts_btc = {v['ts'] for v in btc_velas}
     ts_comunes = sorted(ts_ada & ts_btc)
+
     ada_velas = [v for v in ada_velas if v['ts'] in ts_comunes]
     btc_velas = [v for v in btc_velas if v['ts'] in ts_comunes]
+
     print(f"🔗 Velas alineadas: {len(ada_velas)}")
-    
-    print("🔧 Calculando indicadores...")
+
+    print("🔧 Calculando indicadores ADA...")
     ada_velas = calc_todos(ada_velas)
+    print("🔧 Calculando indicadores BTC...")
     btc_velas = calc_todos(btc_velas)
-    
-    print("🧪 Ejecutando backtest V5...")
+
+    print("🧪 Ejecutando VALIDACION V5...")
     trades = ejecutar_backtest(ada_velas, btc_velas)
-    resultados = imprimir_reporte(trades, tf)
-    
-    # Guardar
+    imprimir_reporte(trades)
+
     import json
-    with open(f'/mnt/Datos/Script/DOT_Bot/logs/backtest_v5_{tf}.json', 'w') as f:
-        json.dump({'resultados': resultados, 'trades': trades}, f, indent=2, default=str)
-    print(f"\n💾 Guardado en logs/backtest_v5_{tf}.json")
+    with open('/mnt/Datos/Script/DOT_Bot/logs/backtest_v5_validation.json', 'w') as f:
+        json.dump({'trades': trades, 'config': CONFIG, 'estrategia': ESTRATEGIA}, f, indent=2, default=str)
+    print("\n💾 Guardado en logs/backtest_v5_validation.json")
