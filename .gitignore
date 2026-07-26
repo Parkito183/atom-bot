@@ -1,0 +1,12 @@
+# Variables de entorno (tokens, claves API)
+config.env
+
+# Archivos de estado (cambian constantemente)
+*.json
+logs/
+__pycache__/
+*.pyc
+
+# Backup files
+*.tar.gz
+backup_*
