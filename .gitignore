@@ -13,3 +13,7 @@ backup_*
 github
 *.token
 *.secret
+
+# Excepción: sí subir resultados de optimización (no son sensibles)
+!logs/optimizer_results_*.json
+!logs/optimizer_results_*.txt

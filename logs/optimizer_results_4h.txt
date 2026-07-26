@@ -1,0 +1,124 @@
+======================================================================
+🏆 TOP 20 CONFIGURACIONES
+======================================================================
+
+RANK #1 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=30-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #2 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=30-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #3 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=30-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #4 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=30-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #5 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=30-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #6 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=30-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #7 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=30-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #8 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=30-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #9 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=35-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #10 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=35-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #11 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=35-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #12 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=35-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #13 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=35-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #14 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=35-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #15 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=35-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #16 | ROI: +385.8% | P&L: $38,579
+  Trades: 136 | WR: 44.9% | PF: 1.22 | Stops: 31%
+  stop=2.0x | obj=4.0x | RSI_L=35-70
+  max_bars=36 | btc_conf=True | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #17 | ROI: +382.3% | P&L: $38,226
+  Trades: 148 | WR: 43.9% | PF: 1.19 | Stops: 33%
+  stop=2.0x | obj=4.0x | RSI_L=30-70
+  max_bars=36 | btc_conf=False | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #18 | ROI: +382.3% | P&L: $38,226
+  Trades: 148 | WR: 43.9% | PF: 1.19 | Stops: 33%
+  stop=2.0x | obj=4.0x | RSI_L=30-70
+  max_bars=36 | btc_conf=False | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #19 | ROI: +382.3% | P&L: $38,226
+  Trades: 148 | WR: 43.9% | PF: 1.19 | Stops: 33%
+  stop=2.0x | obj=4.0x | RSI_L=30-70
+  max_bars=36 | btc_conf=False | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
+RANK #20 | ROI: +382.3% | P&L: $38,226
+  Trades: 148 | WR: 43.9% | PF: 1.19 | Stops: 33%
+  stop=2.0x | obj=4.0x | RSI_L=30-70
+  max_bars=36 | btc_conf=False | apal=5x | st=2.5
+  early_exit=False | trailing=True
+
