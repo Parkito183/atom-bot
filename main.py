@@ -96,42 +96,60 @@ def msg_trade_cerrado(resultado, tc):
     ])
 
 def ciclo_ninja(snap_inicial, tc):
+    """Modo ninja — YA NO bloquea comandos: procesa Telegram cada 15s
+    mientras monitorea el precio. Evalúa salida cada ~120s reales (por tiempo,
+    no por conteo de iteraciones, para que sea preciso aunque se interrumpa)."""
     tipo = snap_inicial['_tipo_trade']
     print(f"[{datetime.now().strftime('%H:%M:%S')}] 🥷 NINJA activo — {tipo.upper()}")
-    max_iter = int(CFG['max_bars']*4*60/2) + 50
-    bars_transcurridas = 0
-    for it in range(max_iter):
-        time.sleep(120)
-        p = precio_actual("ADAUSDT")
-        if not p: continue
 
-        estado_t = cargar_estado_trading()
-        if not estado_t.get('en_trade'):
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Trade cerrado externamente")
-            return
+    ts_inicio = time.time()
+    max_segundos = CFG['max_bars']*4*3600 + 600  # margen de 10 min
+    ts_ultimo_check_precio = 0.0
 
-        snap = snapshot_actual(tc) or snap_inicial
-        snap['ada_precio'] = p
+    while time.time()-ts_inicio < max_segundos:
+        ahora = time.time()
 
-        trade = estado_t['trade_actual']
-        trade['precio_max'] = max(trade.get('precio_max',p), p)
-        trade['precio_min'] = min(trade.get('precio_min',p), p)
-        # Actualizar barras transcurridas aprox (cada vela 4h = 120 iteraciones de 2min)
-        trade['bars_transcurridas'] = it // 120
+        # Procesar comandos de Telegram SIEMPRE, aunque estemos en trade
+        comandos = escuchar()
+        if comandos:
+            estado_t = cargar_estado_trading()
+            for cmd in comandos:
+                procesar(cmd, {}, snap_inicial.get('ada_precio',0), tc, 0,
+                         ALERTAS_CONFIG, estado_t, resumen_completo(tc))
 
-        debe_salir, razon = señal_salida(tipo, p, trade, snap)
+        # Evaluar salida cada ~120s reales (no bloquea el resto)
+        if ahora - ts_ultimo_check_precio >= 120:
+            ts_ultimo_check_precio = ahora
+            p = precio_actual("ADAUSDT")
+            if p:
+                estado_t = cargar_estado_trading()
+                if not estado_t.get('en_trade'):
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Trade cerrado externamente")
+                    return
 
-        pe=trade['precio_entrada']
-        pnl = (p-pe)/pe*100 if tipo=='long' else (pe-p)/pe*100
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🥷 {tipo.upper()} "
-              f"P&L:{pnl:+.2f}% | ADA:${p:.5f} | F&G:{snap.get('fng',50)}")
+                snap = snapshot_actual(tc) or snap_inicial
+                snap['ada_precio'] = p
 
-        if debe_salir:
-            resultado = cerrar_trade(p, razon, tc)
-            if resultado:
-                enviar(msg_trade_cerrado(resultado, tc))
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] Trade cerrado: {razon} | P&L:{resultado['pnl_pct']:+.2f}%")
-            return
+                trade = estado_t['trade_actual']
+                trade['precio_max'] = max(trade.get('precio_max',p), p)
+                trade['precio_min'] = min(trade.get('precio_min',p), p)
+                trade['bars_transcurridas'] = int((ahora-ts_inicio)/(4*3600))
+
+                debe_salir, razon = señal_salida(tipo, p, trade, snap)
+
+                pe=trade['precio_entrada']
+                pnl = (p-pe)/pe*100 if tipo=='long' else (pe-p)/pe*100
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] 🥷 {tipo.upper()} "
+                      f"P&L:{pnl:+.2f}% | ADA:${p:.5f} | F&G:{snap.get('fng',50)}")
+
+                if debe_salir:
+                    resultado = cerrar_trade(p, razon, tc)
+                    if resultado:
+                        enviar(msg_trade_cerrado(resultado, tc))
+                        print(f"[{datetime.now().strftime('%H:%M:%S')}] Trade cerrado: {razon} | P&L:{resultado['pnl_pct']:+.2f}%")
+                    return
+
+        time.sleep(15)  # mismo ritmo que el loop principal — responsive a Telegram
 
     p = precio_actual("ADAUSDT") or snap_inicial['ada_precio']
     resultado = cerrar_trade(p, "tiempo_maximo", tc)
