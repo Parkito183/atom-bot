@@ -114,7 +114,7 @@ def ciclo_ninja(snap_inicial, tc):
         if comandos:
             estado_t = cargar_estado_trading()
             for cmd in comandos:
-                procesar(cmd, {}, snap_inicial.get('ada_precio',0), tc, 0,
+                procesar(cmd, {}, 0, tc, 0,
                          ALERTAS_CONFIG, estado_t, resumen_completo(tc))
 
         # Evaluar salida cada ~120s reales (no bloquea el resto)
