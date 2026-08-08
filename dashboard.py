@@ -34,6 +34,12 @@ def api_datos():
     valor_mxn   = total_atom * precio_usd * tc
     cambio_ref  = ((precio_usd-precio_ref)/precio_ref*100) if precio_ref else 0
 
+    try:
+        from historial_rewards import obtener_historial_rewards
+        rewards_historico = obtener_historial_rewards().get("total_atom", 0.0)
+    except Exception:
+        rewards_historico = 0.0
+
     APR       = 0.15
     mes_atom  = staking * APR / 12
     mes_mxn   = mes_atom * precio_usd * tc
@@ -46,15 +52,24 @@ def api_datos():
     ganados     = trading.get("trades_ganados", 0)
     wr          = ganados/total_trades*100 if total_trades else 0
 
-    # P&L trade activo
+    # P&L trade activo — consulta precio REAL de ADA (no el de ATOM guardado en estado)
     pnl_actual = 0
     gmxn_actual = 0
+    ada_precio_actual = None
     if en_trade and trade_act:
         pe   = trade_act.get("precio_entrada", 0)
         tipo = trade_act.get("tipo","long")
         cap_ef = trade_act.get("capital_efectivo_mxn", 80000)
-        # precio actual desde estado
-        p_actual = precio_usd  # ADA precio
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "https://api.binance.com/api/v3/ticker/price?symbol=ADAUSDT",
+                headers={"User-Agent":"Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                ada_precio_actual = float(json.loads(r.read())["price"])
+        except Exception:
+            ada_precio_actual = None
+        p_actual = ada_precio_actual if ada_precio_actual else pe
         if pe > 0:
             if tipo in ("long","scalping"):
                 pnl_actual = (p_actual-pe)/pe*100
@@ -71,6 +86,7 @@ def api_datos():
             "disponible": disponible,
             "staking": staking,
             "rewards": rewards,
+            "rewards_historico": rewards_historico,
             "unbonding": unbonding,
             "total": total_atom,
             "valor_mxn": valor_mxn,
@@ -382,6 +398,10 @@ HTML = r"""<!DOCTYPE html>
       <span class="data-value green" id="rewards">-.---- ATOM</span>
     </div>
     <div class="data-row">
+      <span class="data-label">🎁 Histórico reclamado</span>
+      <span class="data-value green" id="rewards-historico">-.---- ATOM</span>
+    </div>
+    <div class="data-row">
       <span class="data-label">📊 Total</span>
       <span class="data-value atom" id="total-atom">-.-- ATOM</span>
     </div>
@@ -533,6 +553,7 @@ async function actualizar() {
     document.getElementById('disponible').textContent = `${atom.disponible.toFixed(4)} ATOM`;
     document.getElementById('staking').textContent = `${atom.staking.toFixed(2)} ATOM`;
     document.getElementById('rewards').textContent = `${atom.rewards.toFixed(4)} ATOM`;
+    document.getElementById('rewards-historico').textContent = `${atom.rewards_historico.toFixed(4)} ATOM`;
     document.getElementById('total-atom').textContent = `${atom.total.toFixed(4)} ATOM`;
     document.getElementById('valor-mxn').textContent = `$${atom.valor_mxn.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2})} MXN`;
 

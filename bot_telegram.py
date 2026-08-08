@@ -147,6 +147,14 @@ def msg_bienvenida() -> str:
         "*/github* → Subir cambios a GitHub",
     ])
 
+def _total_rewards_historico() -> float:
+    try:
+        from historial_rewards import obtener_historial_rewards
+        return obtener_historial_rewards().get("total_atom", 0.0)
+    except Exception as e:
+        print(f"⚠️ Error obteniendo histórico de rewards: {e}")
+        return 0.0
+
 def msg_atom_completo(saldos: dict, precio_usd: float, tc: float,
                       compras: list) -> str:
     if not precio_usd: return "⚠️ Sin precio disponible"
@@ -173,6 +181,7 @@ def msg_atom_completo(saldos: dict, precio_usd: float, tc: float,
         f"Libre: *{disponible:.4f}* ATOM",
         f"Staking: *{staking:.4f}* ATOM",
         f"Rewards: *{rewards:.6f}* ATOM",
+        f"🎁 Histórico reclamado: *{_total_rewards_historico():.4f}* ATOM",
     ]
     if unbonding > 0:
         lineas.append(f"⏳ Unbonding: *{unbonding:.4f}* ATOM")
@@ -334,7 +343,12 @@ def procesar(txt: str, saldos: dict, precio_usd: float, tc: float,
             enviar(f"⚠️ Error obteniendo señal: {e}")
 
     elif cmd in ("/posicion", "💼 posición", "💼 posicion"):
-        enviar(msg_posicion(precio_usd, tc, estado_t))
+        try:
+            from trading.señales import precio_actual
+            precio_ada = precio_actual("ADAUSDT")
+        except Exception:
+            precio_ada = None
+        enviar(msg_posicion(precio_ada or precio_usd, tc, estado_t))
 
     elif cmd in ("/historial", "📋 historial"):
         enviar(msg_historial(resumen, tc))
