@@ -100,7 +100,7 @@ def obtener_fng_actual():
 
 def snapshot_actual(tc=17.5):
     """Snapshot completo compatible con el motor ATR+Supertrend."""
-    from .estrategias import CFG
+    from .estrategias import CFG, detectar_regimen_btc
 
     ada = descargar_velas("ADAUSDT", "4h", 150)
     btc = descargar_velas("BTCUSDT", "4h", 150)
@@ -128,7 +128,7 @@ def snapshot_actual(tc=17.5):
     else:
         mercado = "neutral"
 
-    return {
+    snap = {
         'ts':            ultimo['ts'],
         'ada_precio':    ultimo['close'],
         'ada_precio_mxn':ultimo['close']*tc,
@@ -144,3 +144,5 @@ def snapshot_actual(tc=17.5):
         'mercado':       mercado,
         'tc':            tc,
     }
+    snap['btc_regimen'] = detectar_regimen_btc(snap)
+    return snap

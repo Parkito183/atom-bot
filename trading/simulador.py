@@ -4,7 +4,7 @@ Paper trading con el motor único ATR+Supertrend. Un solo apalancamiento (CFG['a
 """
 import json, os
 from datetime import datetime
-from .estrategias import CFG, pnl_neto, ganancia_mxn, calcular_niveles
+from .estrategias import CFG, pnl_neto, ganancia_mxn, calcular_niveles, detectar_regimen_btc
 
 BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ESTADO_FILE = os.path.join(BASE_DIR, "logs", "estado_trading.json")
@@ -42,7 +42,7 @@ def abrir_trade(tipo, precio, snap, tc=TC_DEFAULT):
         'capital_efectivo_usd': cap_ef, 'capital_efectivo_mxn': cap_ef*tc,
         'fng_entrada': snap.get('fng',50), 'rsi_entrada': snap.get('rsi',50),
         'mercado': snap.get('mercado','neutral'),
-        'btc_regimen': snap.get('_btc_regimen','lateral'), 'tc': tc,
+        'btc_regimen': snap.get('btc_regimen') or detectar_regimen_btc(snap), 'tc': tc,
     }
     estado['en_trade']=True; estado['trade_actual']=trade
     estado['ultima_señal']={'tipo':tipo,'fecha':datetime.now().isoformat(),
