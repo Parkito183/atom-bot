@@ -23,6 +23,19 @@ CFG = {
     'comision':           0.0005,
 }
 
+# Restaurado (hallazgo 2026-08-08): el optimizer que validó stop=3.0x/obj=4.5x
+# exigía ratio riesgo:recompensa >= min_rr al entrar; esa condición nunca llegó
+# a señal_long/señal_short cuando se migró el ganador del grid search al motor
+# en vivo. Con stop_atr_mult y objetivo_atr_mult FIJOS (no varían por trade), el
+# ratio es una constante algebraica = objetivo_atr_mult/stop_atr_mult, no algo
+# que dependa del precio o el ATR de cada trade — por eso se calcula una sola
+# vez aquí (evita además el ruido de punto flotante de comparar por señal).
+# Con los valores actuales (4.5/3.0=1.5 == min_rr) esta guarda no rechaza nada;
+# vuelve a ser relevante solo si stop_atr_mult/objetivo_atr_mult cambian sin
+# mantener el mínimo de 1.5 — que es exactamente el tipo de regresión silenciosa
+# que se quiere evitar.
+RR_DISPONIBLE = (CFG['objetivo_atr_mult'] / CFG['stop_atr_mult']) >= CFG['min_rr']
+
 def detectar_regimen_btc(snap):
     ema50 = snap.get('btc_ema50'); st = snap.get('btc_supertrend')
     precio = snap.get('btc_precio')
@@ -41,7 +54,7 @@ def señal_long(snap):
     if not (CFG['rsi_long_min'] <= rsi <= CFG['rsi_long_max']): return False
     if snap.get('atr_pct', 1) < CFG['atr_min_pct']: return False
     if CFG['btc_confirmacion'] and detectar_regimen_btc(snap)=='bajista': return False
-    # ratio riesgo:recompensa mínimo lo valida el sizing, no aquí
+    if not RR_DISPONIBLE: return False
     return True
 
 def señal_short(snap):
@@ -52,6 +65,7 @@ def señal_short(snap):
     if not (CFG['rsi_short_min'] <= rsi <= CFG['rsi_short_max']): return False
     if snap.get('atr_pct', 1) < CFG['atr_min_pct']: return False
     if CFG['btc_confirmacion'] and detectar_regimen_btc(snap)=='alcista': return False
+    if not RR_DISPONIBLE: return False
     return True
 
 def calcular_niveles(tipo, precio, atr):
