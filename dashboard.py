@@ -9,6 +9,7 @@ BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 ESTADO_FILE = os.path.join(BASE_DIR, "logs", "estado_atom.json")
 TRADING_FILE= os.path.join(BASE_DIR, "logs", "estado_trading.json")
 HIST_FILE   = os.path.join(BASE_DIR, "logs", "historial_trades.json")
+ESCANEO_FILE= os.path.join(BASE_DIR, "logs", "ultimo_escaneo.json")
 PORT        = int(os.environ.get("DASHBOARD_PORT", "8080"))
 
 def cargar_json(path, default):
@@ -34,11 +35,15 @@ def api_datos():
     valor_mxn   = total_atom * precio_usd * tc
     cambio_ref  = ((precio_usd-precio_ref)/precio_ref*100) if precio_ref else 0
 
+    rewards_nota = None
     try:
         from historial_rewards import obtener_historial_rewards
-        rewards_historico = obtener_historial_rewards().get("total_atom", 0.0)
-    except Exception:
+        _hist = obtener_historial_rewards()
+        rewards_historico = _hist.get("total_atom", 0.0)
+        rewards_nota = _hist.get("nota")
+    except Exception as e:
         rewards_historico = 0.0
+        rewards_nota = f"⚠️ Error obteniendo histórico: {e}"
 
     APR       = 0.15
     mes_atom  = staking * APR / 12
@@ -52,30 +57,37 @@ def api_datos():
     ganados     = trading.get("trades_ganados", 0)
     wr          = ganados/total_trades*100 if total_trades else 0
 
-    # P&L trade activo — consulta precio REAL de ADA (no el de ATOM guardado en estado)
+    # P&L trade activo — consulta precio REAL del activo que se está operando
+    # (no asumir ADA: cada trade guarda su propio símbolo desde que se agregó
+    # el escaneo multi-cripto)
     pnl_actual = 0
     gmxn_actual = 0
-    ada_precio_actual = None
+    activo_precio_actual = None
     if en_trade and trade_act:
         pe   = trade_act.get("precio_entrada", 0)
         tipo = trade_act.get("tipo","long")
+        simbolo_trade = trade_act.get("simbolo", "ADAUSDT")
         cap_ef = trade_act.get("capital_efectivo_mxn", 80000)
         try:
             import urllib.request
             req = urllib.request.Request(
-                "https://api.binance.com/api/v3/ticker/price?symbol=ADAUSDT",
+                f"https://api.binance.com/api/v3/ticker/price?symbol={simbolo_trade}",
                 headers={"User-Agent":"Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=5) as r:
-                ada_precio_actual = float(json.loads(r.read())["price"])
+                activo_precio_actual = float(json.loads(r.read())["price"])
         except Exception:
-            ada_precio_actual = None
-        p_actual = ada_precio_actual if ada_precio_actual else pe
+            activo_precio_actual = None
+        p_actual = activo_precio_actual if activo_precio_actual else pe
         if pe > 0:
-            if tipo in ("long","scalping"):
-                pnl_actual = (p_actual-pe)/pe*100
-            else:
-                pnl_actual = (pe-p_actual)/pe*100
+            # Usa la misma pnl_neto() del motor real (resta comisión ida y
+            # vuelta) en vez de una fórmula propia duplicada — antes este
+            # cálculo no restaba comisión y el P&L en vivo quedaba inflado
+            # ~0.1pp respecto a lo que el trade realmente liquida al cerrar.
+            from trading.estrategias import pnl_neto
+            pnl_actual = pnl_neto(tipo, pe, p_actual)
             gmxn_actual = cap_ef * pnl_actual / 100
+
+    escaneo = cargar_json(ESCANEO_FILE, {})
 
     return {
         "atom": {
@@ -87,6 +99,7 @@ def api_datos():
             "staking": staking,
             "rewards": rewards,
             "rewards_historico": rewards_historico,
+            "rewards_nota": rewards_nota,
             "unbonding": unbonding,
             "total": total_atom,
             "valor_mxn": valor_mxn,
@@ -97,6 +110,7 @@ def api_datos():
         "trading": {
             "en_trade": en_trade,
             "trade_actual": trade_act,
+            "activo_precio_actual": activo_precio_actual,
             "balance": balance,
             "total_trades": total_trades,
             "ganados": ganados,
@@ -105,6 +119,7 @@ def api_datos():
             "gmxn_actual": gmxn_actual,
         },
         "historial": historial[-8:],
+        "escaneo": escaneo,
     }
 
 HTML = r"""<!DOCTYPE html>
@@ -302,6 +317,22 @@ HTML = r"""<!DOCTYPE html>
   .hist-pnl { font-family: 'Space Mono', monospace; font-weight: 700; }
   .hist-mxn { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--muted); }
 
+  /* Escaneo multi-cripto */
+  .esc-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 0; border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .esc-item:last-child { border-bottom: none; }
+  .esc-item.ganador { background: rgba(16,185,129,0.08); border-radius: 8px; padding-left: 6px; }
+  .esc-activo { font-weight: 700; width: 52px; font-family: 'Space Mono', monospace; }
+  .esc-precio { color: var(--muted); font-family: 'Space Mono', monospace; width: 90px; }
+  .esc-ind { color: var(--muted); font-size: 12px; flex: 1; }
+  .esc-señal { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+  .esc-long  { background: rgba(16,185,129,0.2); color: var(--green); }
+  .esc-short { background: rgba(239,68,68,0.2); color: var(--red); }
+  .esc-espera{ background: rgba(100,116,139,0.2); color: var(--muted); }
+
   /* Indicadores */
   .indicadores-grid {
     display: grid; grid-template-columns: 1fr 1fr;
@@ -369,8 +400,8 @@ HTML = r"""<!DOCTYPE html>
       <span class="card-icon">⚛️</span>
       <span class="card-title">Precio ATOM</span>
     </div>
-    <div class="precio-big" id="precio-usd">$-.----</div>
-    <div class="precio-sub" id="precio-mxn">$--.-- MXN</div>
+    <div class="precio-big" id="precio-mxn">$--.-- MXN</div>
+    <div class="precio-sub" id="precio-usd">$-.----</div>
     <div class="cambio neu" id="cambio-ref">±0.00%</div>
     <div style="margin-top:16px; border-top:1px solid var(--border); padding-top:14px;">
       <div class="data-row">
@@ -401,6 +432,7 @@ HTML = r"""<!DOCTYPE html>
       <span class="data-label">🎁 Histórico reclamado</span>
       <span class="data-value green" id="rewards-historico">-.---- ATOM</span>
     </div>
+    <div id="rewards-nota" style="display:none; font-size:11px; color:var(--yellow); padding:2px 0 6px 0; text-align:right;"></div>
     <div class="data-row">
       <span class="data-label">📊 Total</span>
       <span class="data-value atom" id="total-atom">-.-- ATOM</span>
@@ -448,6 +480,12 @@ HTML = r"""<!DOCTYPE html>
       <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">P&L TRADE ACTIVO</div>
       <div class="pnl-big neu" id="pnl-pct">--.--%</div>
       <div style="font-size:18px; font-family:'Space Mono',monospace; color:var(--muted)" id="pnl-mxn">$0 MXN</div>
+      <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border); font-size:12px; font-family:'Space Mono',monospace; color:var(--muted); text-align:left;">
+        <div style="display:flex; justify-content:space-between; padding:2px 0;"><span>Entrada</span><span id="trade-entrada">--</span></div>
+        <div style="display:flex; justify-content:space-between; padding:2px 0;"><span>Actual</span><span id="trade-precio-actual">--</span></div>
+        <div style="display:flex; justify-content:space-between; padding:2px 0; color:var(--green)"><span>🎯 Objetivo</span><span id="trade-objetivo">--</span></div>
+        <div style="display:flex; justify-content:space-between; padding:2px 0; color:var(--red)"><span>🛑 Stop</span><span id="trade-stop">--</span></div>
+      </div>
     </div>
     <!-- Balance acumulado -->
     <div style="text-align:center; background:var(--surface); border-radius:12px; padding:16px;">
@@ -479,8 +517,8 @@ HTML = r"""<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- Indicadores de mercado ADA -->
-  <div style="font-size:12px; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.05em;">Indicadores ADA/USDT</div>
+  <!-- Indicadores de mercado del activo vigilado/en trade -->
+  <div style="font-size:12px; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.05em;" id="indicadores-titulo">Indicadores ADA/USDT</div>
   <div class="indicadores-grid">
     <div class="ind-item">
       <div class="ind-name">RSI (14)</div>
@@ -498,7 +536,7 @@ HTML = r"""<!DOCTYPE html>
       <div class="ind-ctx" id="fng-ctx" style="color:var(--muted); margin-top:10px">--</div>
     </div>
     <div class="ind-item">
-      <div class="ind-name">ADA precio</div>
+      <div class="ind-name" id="ada-label">Precio</div>
       <div class="ind-value atom" id="ada-precio">$-.----</div>
       <div class="ind-ctx" id="ada-mxn" style="color:var(--muted)">--</div>
     </div>
@@ -507,6 +545,17 @@ HTML = r"""<!DOCTYPE html>
       <div class="ind-value" id="mercado-val" style="font-size:18px">--</div>
       <div class="ind-ctx" id="supertrend-val" style="color:var(--muted)">ST: --</div>
     </div>
+  </div>
+</div>
+
+<!-- Último escaneo multi-cripto -->
+<div class="card" style="margin-bottom:12px">
+  <div class="card-header">
+    <span class="card-icon">🛰️</span>
+    <span class="card-title">Último Escaneo — Prioridad LINK &gt; LTC &gt; SUI &gt; DOGE &gt; HBAR &gt; ADA</span>
+  </div>
+  <div id="escaneo-list">
+    <div style="text-align:center; color:var(--muted); padding:12px; font-size:14px">Sin escaneo aún</div>
   </div>
 </div>
 
@@ -539,9 +588,9 @@ async function actualizar() {
     // Header timestamp
     document.getElementById('ts').textContent = atom.ts;
 
-    // ATOM precio
-    document.getElementById('precio-usd').textContent = `$${atom.precio_usd.toFixed(4)}`;
+    // ATOM precio — MXN es el valor principal (grande), USD queda como referencia (chico)
     document.getElementById('precio-mxn').textContent = `$${atom.precio_mxn.toFixed(2)} MXN`;
+    document.getElementById('precio-usd').textContent = `$${atom.precio_usd.toFixed(4)} USD`;
     document.getElementById('tc').textContent = `$${atom.tc.toFixed(2)}`;
 
     const cambioEl = document.getElementById('cambio-ref');
@@ -554,6 +603,13 @@ async function actualizar() {
     document.getElementById('staking').textContent = `${atom.staking.toFixed(2)} ATOM`;
     document.getElementById('rewards').textContent = `${atom.rewards.toFixed(4)} ATOM`;
     document.getElementById('rewards-historico').textContent = `${atom.rewards_historico.toFixed(4)} ATOM`;
+    const notaEl = document.getElementById('rewards-nota');
+    if (atom.rewards_nota) {
+      notaEl.textContent = atom.rewards_nota;
+      notaEl.style.display = 'block';
+    } else {
+      notaEl.style.display = 'none';
+    }
     document.getElementById('total-atom').textContent = `${atom.total.toFixed(4)} ATOM`;
     document.getElementById('valor-mxn').textContent = `$${atom.valor_mxn.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2})} MXN`;
 
@@ -566,11 +622,18 @@ async function actualizar() {
     const badge = document.getElementById('mode-badge');
     if (trading.en_trade && trading.trade_actual) {
       const tipo = trading.trade_actual.tipo;
+      const activoTrade = trading.trade_actual.activo || (trading.trade_actual.simbolo||'ADAUSDT').replace('USDT','');
       const emojis = {long:'📈',short:'📉',scalping:'⚡'};
-      badge.textContent = `${emojis[tipo]||'🥷'} MODO NINJA — ${tipo.toUpperCase()}`;
+      // Precio actual del activo en trade, en vivo (MXN primero, tema de todo el dashboard)
+      let precioTxt = '';
+      if (trading.activo_precio_actual) {
+        const precioMxn = trading.activo_precio_actual * (atom.tc || 17.5);
+        precioTxt = ` | $${precioMxn.toFixed(4)} MXN`;
+      }
+      badge.textContent = `${emojis[tipo]||'🥷'} MODO NINJA — ${activoTrade} ${tipo.toUpperCase()}${precioTxt}`;
       badge.className = `mode-badge mode-ninja-${tipo}`;
     } else {
-      badge.textContent = '🔍 MODO VIGILANCIA — buscando señales';
+      badge.textContent = '🔍 MODO VIGILANCIA — buscando señales en 6 activos';
       badge.className = 'mode-badge mode-vigilancia';
     }
 
@@ -584,6 +647,25 @@ async function actualizar() {
     pnlMxn.textContent = `${gmxn>=0?'+':''}$${Math.round(gmxn).toLocaleString()} MXN`;
     pnlMxn.style.color = pnl>0?'var(--green)':pnl<0?'var(--red)':'var(--muted)';
 
+    // Precios de referencia del trade activo, en MXN (mismo criterio que el
+    // resto del dashboard) — para verificar a simple vista que el P&L mostrado
+    // corresponde al movimiento real del precio
+    if (trading.en_trade && trading.trade_actual) {
+      const tr2 = trading.trade_actual;
+      const tcEntrada = tr2.tc || atom.tc || 17.5;  // tipo de cambio vigente cuando se abrió el trade
+      const tcHoy = atom.tc || 17.5;
+      const precioActualTxt = trading.activo_precio_actual
+        ? `$${(trading.activo_precio_actual * tcHoy).toFixed(4)} MXN` : '--';
+      document.getElementById('trade-entrada').textContent = `$${((tr2.precio_entrada||0) * tcEntrada).toFixed(4)} MXN`;
+      document.getElementById('trade-precio-actual').textContent = precioActualTxt;
+      document.getElementById('trade-objetivo').textContent = `$${((tr2.objetivo||0) * tcEntrada).toFixed(4)} MXN`;
+      document.getElementById('trade-stop').textContent = `$${((tr2.stop||0) * tcEntrada).toFixed(4)} MXN`;
+    } else {
+      for (const id of ['trade-entrada','trade-precio-actual','trade-objetivo','trade-stop']) {
+        document.getElementById(id).textContent = '--';
+      }
+    }
+
     // Balance acumulado
     const bal = trading.balance;
     const balEl = document.getElementById('balance');
@@ -592,12 +674,21 @@ async function actualizar() {
     document.getElementById('wr-total').textContent =
       `WR: ${trading.wr.toFixed(0)}% | ${trading.total_trades} trades`;
 
-    // Indicadores ADA (desde estado trading si existe)
+    // Indicadores del activo actual (trade abierto, o el de mayor prioridad del escaneo)
     const tr = d.trading;
+    let activoInd = 'ADA';
     if (tr.trade_actual) {
+      activoInd = tr.trade_actual.activo || (tr.trade_actual.simbolo||'ADAUSDT').replace('USDT','');
       const pe = tr.trade_actual.precio_entrada || 0;
-      document.getElementById('ada-precio').textContent = `$${pe.toFixed(4)}`;
+      const tcTrade = tr.trade_actual.tc || atom.tc || 17.5;
+      // MXN grande (principal), USD chico (referencia)
+      document.getElementById('ada-precio').textContent = `$${(pe*tcTrade).toFixed(4)} MXN`;
+      document.getElementById('ada-mxn').textContent = `$${pe.toFixed(4)} USD (entrada)`;
+    } else if (d.escaneo && d.escaneo.activos && d.escaneo.activos.length) {
+      activoInd = d.escaneo.activos[0].activo || 'ADA';
     }
+    document.getElementById('indicadores-titulo').textContent = `Indicadores ${activoInd}/USDT`;
+    document.getElementById('ada-label').textContent = `${activoInd} precio`;
 
     // Historial
     const histEl = document.getElementById('historial-list');
@@ -605,15 +696,37 @@ async function actualizar() {
       histEl.innerHTML = [...hist].reverse().map(t => {
         const emoji = t.ganador ? '✅' : '🔴';
         const tipo = t.tipo || '?';
+        const activo = t.activo || (t.simbolo||'ADAUSDT').replace('USDT','');
         const pnl = t.pnl_pct || 0;
         const gmxn = t.ganancia_mxn || 0;
         const fecha = (t.fecha_entrada||'').substring(0,10);
         return `<div class="hist-item">
           <span class="hist-emoji">${emoji}</span>
           <span class="hist-tipo hist-${tipo}">${tipo.toUpperCase()}</span>
-          <span class="hist-fecha">${fecha}</span>
+          <span class="hist-fecha">${activo} · ${fecha}</span>
           <span class="hist-pnl" style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${pnl.toFixed(2)}%</span>
           <span class="hist-mxn">${gmxn>=0?'+':''}$${Math.round(gmxn).toLocaleString()}</span>
+        </div>`;
+      }).join('');
+    }
+
+    // Último escaneo multi-cripto
+    const escEl = document.getElementById('escaneo-list');
+    if (d.escaneo && d.escaneo.activos && d.escaneo.activos.length) {
+      const ganador = d.escaneo.ganador;
+      escEl.innerHTML = d.escaneo.activos.map(a => {
+        if (a.error) {
+          return `<div class="esc-item"><span class="esc-activo">${a.activo}</span><span class="esc-ind">sin datos</span></div>`;
+        }
+        const señal = a.señal;
+        const cls = señal === 'long' ? 'esc-long' : señal === 'short' ? 'esc-short' : 'esc-espera';
+        const texto = señal ? señal.toUpperCase() : 'esperar';
+        const esGanador = ganador && a.simbolo === ganador;
+        return `<div class="esc-item ${esGanador?'ganador':''}">
+          <span class="esc-activo">${a.activo}${esGanador?' 🏆':''}</span>
+          <span class="esc-precio">$${(a.precio||0).toFixed(4)}</span>
+          <span class="esc-ind">RSI:${(a.rsi||0).toFixed(0)} ST:${a.supertrend||'--'} F&G:${a.fng||'--'}</span>
+          <span class="esc-señal ${cls}">${texto}</span>
         </div>`;
       }).join('');
     }
@@ -660,10 +773,15 @@ async function actualizarSenal() {
     document.getElementById('fng-ctx').style.color = fngColors[fi];
     document.getElementById('fng-val').style.color = fngColors[fi];
 
-    // ADA precio
-    if (d.ada_precio) {
-      document.getElementById('ada-precio').textContent = `$${d.ada_precio.toFixed(4)}`;
-      document.getElementById('ada-mxn').textContent = `$${(d.ada_precio * (d.tc||17.5)).toFixed(4)} MXN`;
+    // Precio del activo vigilado/en trade
+    if (d.activo) {
+      document.getElementById('indicadores-titulo').textContent = `Indicadores ${d.activo}/USDT`;
+      document.getElementById('ada-label').textContent = `${d.activo} precio`;
+    }
+    if (d.precio) {
+      // MXN grande (principal), USD chico (referencia)
+      document.getElementById('ada-precio').textContent = `$${(d.precio * (d.tc||17.5)).toFixed(4)} MXN`;
+      document.getElementById('ada-mxn').textContent = `$${d.precio.toFixed(4)} USD`;
     }
 
     // Mercado
@@ -702,26 +820,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(datos).encode())
 
         elif self.path == '/api/senal':
-            # Leer último snapshot del estado
+            # Leer último snapshot del estado. No asume ADA: si hay trade
+            # activo usa su símbolo; si no, usa el primero del último
+            # escaneo (el de mayor prioridad/score evaluado).
             estado = cargar_json(ESTADO_FILE, {})
             trading = cargar_json(TRADING_FILE, {})
+            escaneo = cargar_json(ESCANEO_FILE, {})
             tc = estado.get('tc', 17.5)
-            # Intentar leer indicadores del estado guardado
             senal = {
+                'activo':     'ADA',
                 'rsi':        50,
                 'fng':        estado.get('trading', {}).get('ultima_señal', {}).get('fng', 50),
                 'mercado':    'neutral',
                 'supertrend': 'bajista',
-                'ada_precio': 0,
+                'precio':     0,
                 'tc':         tc,
             }
-            # Si hay trade activo, usar sus datos de entrada
             trade = trading.get('trade_actual')
             if trade:
+                senal['activo'] = trade.get('activo', trade.get('simbolo','ADAUSDT').replace('USDT',''))
                 senal['rsi'] = trade.get('rsi_entrada', 50)
                 senal['fng'] = trade.get('fng_entrada', 50)
                 senal['mercado'] = trade.get('mercado', 'neutral')
-                senal['ada_precio'] = trade.get('precio_entrada', 0)
+                senal['precio'] = trade.get('precio_entrada', 0)
+            elif escaneo.get('activos'):
+                primero = escaneo['activos'][0]
+                if not primero.get('error'):
+                    senal['activo'] = primero.get('activo','ADA')
+                    senal['rsi'] = primero.get('rsi', 50)
+                    senal['fng'] = primero.get('fng', 50)
+                    senal['mercado'] = primero.get('mercado', 'neutral')
+                    senal['supertrend'] = primero.get('supertrend', 'bajista')
+                    senal['precio'] = primero.get('precio', 0)
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')

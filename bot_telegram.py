@@ -147,13 +147,13 @@ def msg_bienvenida() -> str:
         "*/github* → Subir cambios a GitHub",
     ])
 
-def _total_rewards_historico() -> float:
+def _historico_rewards() -> dict:
     try:
         from historial_rewards import obtener_historial_rewards
-        return obtener_historial_rewards().get("total_atom", 0.0)
+        return obtener_historial_rewards()
     except Exception as e:
         print(f"⚠️ Error obteniendo histórico de rewards: {e}")
-        return 0.0
+        return {"total_atom": 0.0, "nota": f"⚠️ Error obteniendo histórico: {e}"}
 
 def msg_atom_completo(saldos: dict, precio_usd: float, tc: float,
                       compras: list) -> str:
@@ -175,14 +175,17 @@ def msg_atom_completo(saldos: dict, precio_usd: float, tc: float,
     val_nombre = validadores[0].get("nombre","Everstake") if validadores and isinstance(validadores[0], dict) else (validadores[0] if validadores else "Everstake")
     wallet = saldos.get("wallet","cosmos10a7...lxln4")
     wallet_corta= wallet[:12]+"..."+wallet[-4:] if len(wallet)>16 else wallet
+    historico = _historico_rewards()
     lineas = [
         "🌌 *REPORTE ATOM*",
         SEP,
         f"Libre: *{disponible:.4f}* ATOM",
         f"Staking: *{staking:.4f}* ATOM",
         f"Rewards: *{rewards:.6f}* ATOM",
-        f"🎁 Histórico reclamado: *{_total_rewards_historico():.4f}* ATOM",
+        f"🎁 Histórico reclamado: *{historico.get('total_atom',0.0):.4f}* ATOM",
     ]
+    if historico.get("nota"):
+        lineas.append(f"_{historico['nota']}_")
     if unbonding > 0:
         lineas.append(f"⏳ Unbonding: *{unbonding:.4f}* ATOM")
     lineas += [
@@ -206,6 +209,30 @@ def msg_trade_actual(snap: dict, estado_t: dict) -> str:
     from trading.gestor import descripcion_señal, contexto_mercado
     return descripcion_señal(snap)
 
+def msg_escaneo_completo(escaneo: dict) -> str:
+    """Resumen del último ciclo de vigilancia: qué señal dio cada uno de
+    los activos escaneados, en orden de prioridad."""
+    if not escaneo or not escaneo.get("activos"):
+        return "⏳ *SIN ESCANEO RECIENTE*\nEl bot aún no completó su primer ciclo de vigilancia."
+    ts = escaneo.get("ts","")[:16].replace("T"," ")
+    lineas = [f"🔍 *ÚLTIMO ESCANEO* — {ts}", SEP]
+    for a in escaneo["activos"]:
+        if a.get("error"):
+            lineas.append(f"⚠️ {a['activo']}: sin datos")
+            continue
+        señal = a.get("señal")
+        emoji = "📈" if señal=="long" else "📉" if señal=="short" else "⏳"
+        etiqueta = señal.upper() if señal else "esperar"
+        lineas.append(f"{emoji} *{a['activo']}*: ${a['precio']:.4f} | RSI:{a['rsi']:.0f} | "
+                       f"ST:{a['supertrend']} | {etiqueta}")
+    ganador = escaneo.get("ganador")
+    lineas.append(SEP)
+    if ganador:
+        lineas.append(f"✅ Trade abierto en *{ganador.replace('USDT','')}*")
+    else:
+        lineas.append("Sin señales — modo vigilancia continúa")
+    return "\n".join(lineas)
+
 def msg_posicion(precio_usd: float, tc: float, estado_t: dict) -> str:
     from trading.simulador import estado_trade_actual
     trade = estado_trade_actual(precio_usd, tc)
@@ -217,13 +244,14 @@ def msg_posicion(precio_usd: float, tc: float, estado_t: dict) -> str:
             "Evaluando señales cada 15 minutos",
         ])
     tipo = trade['tipo']
+    activo = trade.get('activo', trade.get('simbolo','?').replace('USDT',''))
     pnl = trade['pnl_pct']
     gmxn = trade['ganancia_mxn']
     pe = trade['precio_entrada']
     emoji = "📈" if tipo=="long" else "📉" if tipo=="short" else "⚡"
     ganancia_str = f"{'✅ +' if gmxn>=0 else '🔴 '}{gmxn:,.0f} MXN"
     return "\n".join([
-        f"{emoji} *POSICIÓN ACTIVA — {tipo.upper()}*",
+        f"{emoji} *POSICIÓN ACTIVA — {activo} {tipo.upper()}*",
         SEP,
         f"Entrada: *${pe:.6f}* USD",
         f"Actual: *${precio_usd:.6f}* USD",
@@ -247,10 +275,11 @@ def msg_historial(resumen: dict, tc: float) -> str:
     for t in reversed(hist[-10:]):
         emoji = "✅" if t.get('ganador') else "🔴"
         tipo = t.get('tipo','?').upper()[:5]
+        activo = t.get('activo', t.get('simbolo','ADA').replace('USDT',''))
         pnl = t.get('pnl_pct', 0)
         gmxn = t.get('ganancia_mxn', 0)
         fecha = t.get('fecha_entrada','')[:10]
-        lineas.append(f"{emoji} [{tipo}] {fecha}: {pnl:+.2f}% → {'+' if gmxn>=0 else ''}{gmxn:,.0f} MXN")
+        lineas.append(f"{emoji} [{activo} {tipo}] {fecha}: {pnl:+.2f}% → {'+' if gmxn>=0 else ''}{gmxn:,.0f} MXN")
     lineas.append(SEP)
     for tipo, datos in resumen.get('por_tipo', {}).items():
         lineas.append(f"{'📈' if tipo=='long' else '📉' if tipo=='short' else '⚡'} "
@@ -265,8 +294,9 @@ def msg_modo(estado_t: dict, tc: float) -> str:
     trade = estado_t.get('trade_actual')
     if en_trade and trade:
         tipo = trade.get('tipo','?').upper()
+        activo = trade.get('activo', trade.get('simbolo','?').replace('USDT',''))
         emoji = "🥷"
-        modo_str = f"NINJA — en trade {tipo}"
+        modo_str = f"NINJA — {activo} en trade {tipo}"
         detalle = f"Entrada: ${trade.get('precio_entrada',0):.6f} USD"
     else:
         emoji = "🔍"
@@ -333,22 +363,35 @@ def procesar(txt: str, saldos: dict, precio_usd: float, tc: float,
 
     elif cmd in ("/trade", "📊 trade"):
         try:
-            from trading.señales import snapshot_actual
-            snap = snapshot_actual(tc)
-            if snap:
-                enviar(msg_trade_actual(snap, estado_t))
+            trade_actual = estado_t.get('trade_actual') if estado_t else None
+            if estado_t and estado_t.get('en_trade') and trade_actual:
+                # Hay trade abierto — mostrar el análisis del activo que se está operando
+                simbolo = trade_actual.get('simbolo', 'ADAUSDT')
+                from trading.señales import snapshot_actual
+                snap = snapshot_actual(simbolo, tc)
+                if snap:
+                    enviar(msg_trade_actual(snap, estado_t))
+                else:
+                    enviar(f"⚠️ Sin datos de mercado para {simbolo} en este momento")
             else:
-                enviar("⚠️ Sin datos de mercado en este momento")
+                # Sin trade — mostrar el resumen del último escaneo multi-activo
+                import json as _json
+                try:
+                    escaneo = _json.load(open(os.path.join(LOGS_DIR, "ultimo_escaneo.json")))
+                except Exception:
+                    escaneo = None
+                enviar(msg_escaneo_completo(escaneo))
         except Exception as e:
             enviar(f"⚠️ Error obteniendo señal: {e}")
 
     elif cmd in ("/posicion", "💼 posición", "💼 posicion"):
         try:
+            simbolo = (estado_t.get('trade_actual') or {}).get('simbolo', 'ADAUSDT') if estado_t else 'ADAUSDT'
             from trading.señales import precio_actual
-            precio_ada = precio_actual("ADAUSDT")
+            precio_activo = precio_actual(simbolo)
         except Exception:
-            precio_ada = None
-        enviar(msg_posicion(precio_ada or precio_usd, tc, estado_t))
+            precio_activo = None
+        enviar(msg_posicion(precio_activo or precio_usd, tc, estado_t))
 
     elif cmd in ("/historial", "📋 historial"):
         enviar(msg_historial(resumen, tc))
