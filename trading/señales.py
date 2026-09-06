@@ -98,40 +98,44 @@ def obtener_fng_actual():
     except:
         return 50
 
-def snapshot_actual(tc=17.5):
-    """Snapshot completo compatible con el motor ATR+Supertrend."""
+def snapshot_actual(symbol="ADAUSDT", tc=17.5):
+    """Snapshot completo compatible con el motor ATR+Supertrend, para cualquier
+    símbolo USDT de Binance (no asume ADA — el escaneo multi-cripto pasa el
+    símbolo explícitamente)."""
     from .estrategias import CFG, detectar_regimen_btc
 
-    ada = descargar_velas("ADAUSDT", "4h", 150)
+    activo = descargar_velas(symbol, "4h", 150)
     btc = descargar_velas("BTCUSDT", "4h", 150)
-    if not ada or not btc:
+    if not activo or not btc:
         return None
 
-    calc_rsi(ada, periodo=CFG['rsi_periodo'])
-    calc_atr(ada, periodo=14)
-    calc_supertrend(ada, periodo=CFG['supertrend_periodo'], mult=CFG['supertrend_mult'])
+    calc_rsi(activo, periodo=CFG['rsi_periodo'])
+    calc_atr(activo, periodo=14)
+    calc_supertrend(activo, periodo=CFG['supertrend_periodo'], mult=CFG['supertrend_mult'])
 
     calc_ema_field(btc, 50, 'ema50')
     calc_atr(btc, periodo=14)
     calc_supertrend(btc, periodo=CFG['supertrend_periodo'], mult=CFG['supertrend_mult'])
 
-    ultimo = ada[-1]
-    prev   = ada[-2]
+    ultimo = activo[-1]
+    prev   = activo[-2]
     btc_ultimo = btc[-1]
 
     fng_actual = obtener_fng_actual()
     atr_pct = (ultimo.get('atr',0)/ultimo['close']*100) if ultimo.get('atr') else 0
 
-    if len(ada) >= 50:
-        cambio_50 = (ultimo['close']-ada[-50]['close'])/ada[-50]['close']*100
+    if len(activo) >= 50:
+        cambio_50 = (ultimo['close']-activo[-50]['close'])/activo[-50]['close']*100
         mercado = "alcista" if cambio_50>15 else "bajista" if cambio_50<-15 else "lateral"
     else:
         mercado = "neutral"
 
     snap = {
+        'simbolo':       symbol,
+        'activo':        symbol.replace("USDT", ""),
         'ts':            ultimo['ts'],
-        'ada_precio':    ultimo['close'],
-        'ada_precio_mxn':ultimo['close']*tc,
+        'precio':        ultimo['close'],
+        'precio_mxn':    ultimo['close']*tc,
         'btc_precio':    btc_ultimo['close'],
         'rsi':           ultimo.get('rsi') or 50,
         'atr':           ultimo.get('atr') or 0,

@@ -35,7 +35,8 @@ def abrir_trade(tipo, precio, snap, tc=TC_DEFAULT):
     cap_ef = CAPITAL_MXN/tc*CFG['apalancamiento']
     estado = cargar_estado()
     trade = {
-        'tipo': tipo, 'precio_entrada': precio, 'stop': stop, 'objetivo': objetivo,
+        'tipo': tipo, 'simbolo': snap.get('simbolo','ADAUSDT'), 'activo': snap.get('activo','ADA'),
+        'precio_entrada': precio, 'stop': stop, 'objetivo': objetivo,
         'precio_max': precio, 'precio_min': precio, 'bars_transcurridas': 0,
         'fecha_entrada': datetime.now().isoformat(),
         'capital_mxn': CAPITAL_MXN, 'apalancamiento': CFG['apalancamiento'],

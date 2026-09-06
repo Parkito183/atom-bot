@@ -55,6 +55,7 @@ def descripcion_señal(snap):
     ctx = contexto_mercado(snap)
     SEP = "━━━━━━━━━━━━━━━━━━━"
     rsi = snap['rsi']; tc = snap.get('tc',17.5)
+    activo = snap.get('activo', snap.get('simbolo','?').replace('USDT',''))
     btc_mxn = snap['btc_precio']*tc
 
     if CFG['rsi_long_min']<=rsi<=CFG['rsi_long_max']:
@@ -65,14 +66,14 @@ def descripcion_señal(snap):
         rsi_ctx = f"*{rsi:.1f}* fuera de ambos rangos"
 
     lineas = [
-        "🔍 *ANÁLISIS DE MERCADO*", SEP,
-        f"💹 ADA: *${snap['ada_precio']:.4f}* USD (*${snap['ada_precio_mxn']:.2f}* MXN)",
+        f"🔍 *ANÁLISIS DE MERCADO — {activo}*", SEP,
+        f"💹 {activo}: *${snap['precio']:.4f}* USD (*${snap['precio_mxn']:.2f}* MXN)",
         f"₿ BTC: *${btc_mxn:,.0f}* MXN",
         SEP,
         f"📊 RSI({CFG['rsi_periodo']}): {rsi_ctx}",
         f"🌡️ Fear & Greed: *{snap['fng']}* — {_fng_label(snap['fng'])}",
-        f"📈 Mercado ADA: *{ctx['mercado'].upper()}*",
-        f"🎯 Supertrend ADA: *{ctx['supertrend']}*",
+        f"📈 Mercado {activo}: *{ctx['mercado'].upper()}*",
+        f"🎯 Supertrend {activo}: *{ctx['supertrend']}*",
         f"₿ Régimen BTC: *{ctx['btc_regimen']}*",
         f"📏 ATR: *{snap.get('atr_pct',0):.2f}%* del precio",
         SEP,
