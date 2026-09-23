@@ -37,8 +37,8 @@ def api_datos():
 
     rewards_nota = None
     try:
-        from historial_rewards import obtener_historial_rewards
-        _hist = obtener_historial_rewards()
+        from historial_rewards import obtener_historial_rewards_cache
+        _hist = obtener_historial_rewards_cache()
         rewards_historico = _hist.get("total_atom", 0.0)
         rewards_nota = _hist.get("nota")
     except Exception as e:

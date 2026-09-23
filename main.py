@@ -77,7 +77,7 @@ def cargar_estado_atom():
 _runtime = {
     'precio_usd': None, 'precio_ref': None, 'tc': 17.5, 'saldos': {},
     'alertas_disp': set(),
-    'ts_precio': 0.0, 'ts_blockchain': 0.0, 'ts_save': 0.0,
+    'ts_precio': 0.0, 'ts_blockchain': 0.0, 'ts_save': 0.0, 'ts_rewards': 0.0,
 }
 
 def housekeeping_atom(forzar=False):
@@ -106,6 +106,14 @@ def housekeeping_atom(forzar=False):
             _runtime['saldos']=nuevos
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Blockchain: {nuevos.get('staking',0):.2f} ATOM staked")
             cambios = True
+
+    if ahora-_runtime['ts_rewards']>=60*60:
+        _runtime['ts_rewards']=ahora
+        try:
+            from historial_rewards import obtener_historial_rewards
+            obtener_historial_rewards()  # refresca el caché aquí, en el fondo — nunca en una ruta de petición
+        except Exception as e:
+            print(f"⚠️ Error refrescando histórico de rewards: {e}")
 
     if cambios or ahora-_runtime['ts_save']>=30:
         _runtime['ts_save']=ahora
@@ -284,6 +292,11 @@ def ejecutar():
     estado_atom = cargar_estado_atom()
     _runtime['precio_ref'] = estado_atom.get("precio_ref")
     _runtime['alertas_disp'] = set(estado_atom.get("alertas_disparadas", []))
+    # Semilla de saldos desde el último valor guardado en disco -- si la
+    # primera consulta en vivo (abajo) falla justo al arrancar (red aún
+    # inestable, Cosmos caído, etc.), esto evita mostrar 0.00 en todo
+    # mientras no se recupera; se mantiene el último saldo real conocido.
+    _runtime['saldos'] = estado_atom.get("saldos") or {}
     _runtime['tc'] = obtener_tipo_cambio_mxn()
     _ts_trading = 0.0
     housekeeping_atom(forzar=True)  # precio/saldos frescos desde el primer segundo, no esperar 5 min

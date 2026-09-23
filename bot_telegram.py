@@ -149,8 +149,8 @@ def msg_bienvenida() -> str:
 
 def _historico_rewards() -> dict:
     try:
-        from historial_rewards import obtener_historial_rewards
-        return obtener_historial_rewards()
+        from historial_rewards import obtener_historial_rewards_cache
+        return obtener_historial_rewards_cache()
     except Exception as e:
         print(f"⚠️ Error obteniendo histórico de rewards: {e}")
         return {"total_atom": 0.0, "nota": f"⚠️ Error obteniendo histórico: {e}"}

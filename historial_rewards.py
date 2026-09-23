@@ -156,6 +156,26 @@ def _cargar_cache() -> dict | None:
     return None
 
 
+def obtener_historial_rewards_cache() -> dict:
+    """Lectura RÁPIDA, sin red — nunca hace una consulta en vivo, solo lee el
+    caché en disco (o la semilla si no existe). Úsese en cualquier ruta que
+    sirva una petición del usuario (dashboard, /atom de Telegram): así una
+    fuente LCD caída no puede colgar la página ni el comando. El refresco en
+    vivo (con reintentos y backoff, que sí puede tardar ~20s) debe correr
+    aparte, en el loop de fondo (ver main.py::housekeeping_atom)."""
+    cache = _cargar_cache() or dict(_SEED)
+    try:
+        edad_h = (time.time() - datetime.fromisoformat(cache["actualizado"]).timestamp()) / 3600
+        if edad_h > _CACHE_TTL / 3600:
+            resultado = dict(cache)
+            resultado["nota"] = (f"⚠️ Dato de hace {edad_h:.1f}h — el refresco en segundo plano "
+                                  f"aún no se ha completado (revisar logs si persiste).")
+            return resultado
+    except Exception:
+        pass
+    return cache
+
+
 def obtener_historial_rewards(forzar: bool = False) -> dict:
     """Total histórico de ATOM reclamado por staking (rewards ya retirados).
     Acumula de forma incremental: nunca reemplaza el total, solo lo hace

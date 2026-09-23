@@ -142,8 +142,10 @@ def chk_pnl_correcto():
 @check("8. Histórico de rewards de ATOM no bajó del piso conocido")
 def chk_rewards_historico():
     sys.path.insert(0, BASE_DIR)
-    from historial_rewards import obtener_historial_rewards
-    hist = obtener_historial_rewards()
+    # Lectura de solo-caché, igual que dashboard/Telegram — el refresco en
+    # vivo corre aparte en housekeeping_atom(), no debe bloquear este check.
+    from historial_rewards import obtener_historial_rewards_cache
+    hist = obtener_historial_rewards_cache()
     total = hist.get("total_atom", 0.0)
     if total < REWARDS_FLOOR - 1e-6:
         return "FALLO", (f"total_atom={total:.6f} ATOM, por DEBAJO del piso conocido "

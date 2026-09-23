@@ -86,6 +86,11 @@ def consultar_saldos_blockchain_atom() -> dict:
 
     except Exception as e:
         print(f"⚠️ Error consultando blockchain ATOM: {e}")
+        # None, no un dict en ceros -- así quien llama sabe que la consulta
+        # falló y puede conservar el último saldo bueno conocido, en vez de
+        # sobrescribirlo con ceros falsos (mismo bug que ya corregimos en
+        # historial_rewards.py con la caída de los LCD de Cosmos).
+        return None
 
     return {
         "disponible":    disponible,
